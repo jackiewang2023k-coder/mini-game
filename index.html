@@ -2,17 +2,31 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>最小 H5 小游戏 Demo</title>
+  <title>俄罗斯方块 - H5 Demo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div id="game-container">
-    <canvas id="game-canvas" width="360" height="640"></canvas>
-    <div id="info">
-      <p>操作：点击屏幕 / 鼠标左键 让方块向上跳</p>
-      <p>目标：尽量不要掉到底部</p>
+  <div id="page">
+    <h1>俄罗斯方块</h1>
+
+    <div id="game-wrapper">
+      <!-- 画布：尺寸会在 main.js 里按 10x20 方块自动设置 -->
+      <canvas id="game-canvas"></canvas>
+
+      <div id="help">
+        <p>键盘操作：</p>
+        <ul>
+          <li>← →：左右移动</li>
+          <li>↑：旋转方块</li>
+          <li>↓：加速下落</li>
+          <li>Space：硬降到底</li>
+          <li>Enter：在 Game Over 后重新开始</li>
+        </ul>
+      </div>
     </div>
+
+    <p id="tip">在手机上建议横屏，并连接外接键盘体验更好。</p>
   </div>
 
   <script src="js/main.js"></script>

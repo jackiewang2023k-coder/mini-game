@@ -2,137 +2,327 @@
   const canvas = document.getElementById('game-canvas');
   const ctx = canvas.getContext('2d');
 
-  const WIDTH = canvas.width;
-  const HEIGHT = canvas.height;
+  // 棋盘尺寸：10 列 20 行
+  const COLS = 10;
+  const ROWS = 20;
+  const BLOCK_SIZE = 30; // 每个方块像素大小
 
-  // 游戏状态
-  let isGameOver = false;
-  let score = 0;          // 以帧数近似计时得分
-  let player = null;      // 玩家方块
+  canvas.width = COLS * BLOCK_SIZE;
+  canvas.height = ROWS * BLOCK_SIZE;
+
+  // 颜色：索引 0 为空
+  const COLORS = [
+    '#000000',    // 0 空
+    '#00ffff',    // 1 I
+    '#0000ff',    // 2 J
+    '#ffa500',    // 3 L
+    '#ffff00',    // 4 O
+    '#00ff00',    // 5 S
+    '#800080',    // 6 T
+    '#ff0000'     // 7 Z
+  ];
+
+  // 7 种俄罗斯方块形状（矩阵）
+  const SHAPES = {
+    1: [ // I
+      [1, 1, 1, 1]
+    ],
+    2: [ // J
+      [1, 0, 0],
+      [1, 1, 1]
+    ],
+    3: [ // L
+      [0, 0, 1],
+      [1, 1, 1]
+    ],
+    4: [ // O
+      [1, 1],
+      [1, 1]
+    ],
+    5: [ // S
+      [0, 1, 1],
+      [1, 1, 0]
+    ],
+    6: [ // T
+      [0, 1, 0],
+      [1, 1, 1]
+    ],
+    7: [ // Z
+      [1, 1, 0],
+      [0, 1, 1]
+    ]
+  };
+
+  let board;
+  let currentPiece;
+  let score = 0;
+  let lines = 0;
+  let gameOver = false;
+
+  let dropInterval = 800;  // 下落间隔（毫秒）
   let lastTime = 0;
+  let dropCounter = 0;
 
-  // 初始化玩家
-  function createPlayer() {
-    return {
-      x: WIDTH / 2 - 20,
-      y: HEIGHT / 2,
-      size: 40,
-      vy: 0,          // 竖直速度
-    };
+  function createBoard() {
+    const matrix = [];
+    for (let y = 0; y < ROWS; y++) {
+      matrix.push(new Array(COLS).fill(0));
+    }
+    return matrix;
   }
 
-  // 重置游戏
   function resetGame() {
-    isGameOver = false;
+    board = createBoard();
     score = 0;
-    player = createPlayer();
+    lines = 0;
+    gameOver = false;
+    spawnPiece();
   }
 
-  // 处理“跳跃”
-  function jump() {
-    if (isGameOver) {
-      resetGame();
-      return;
+  function randomPieceType() {
+    return 1 + Math.floor(Math.random() * 7); // 1..7
+  }
+
+  function spawnPiece() {
+    const type = randomPieceType();
+    const shape = SHAPES[type].map(row => row.slice());
+    const piece = {
+      type,
+      matrix: shape,
+      x: 0,
+      y: 0
+    };
+
+    // 初始放在顶部中间
+    piece.x = Math.floor((COLS - piece.matrix[0].length) / 2);
+    piece.y = 0;
+
+    currentPiece = piece;
+
+    if (collide(board, currentPiece)) {
+      // 一出生就碰撞，游戏结束
+      gameOver = true;
     }
-    player.vy = -6;   // 向上一个速度
   }
 
-  // 绑定输入（PC + 手机）
-  function bindInput() {
-    window.addEventListener('mousedown', (e) => {
-      if (e.button === 0) {
-        jump();
+  function collide(board, piece) {
+    const m = piece.matrix;
+    for (let y = 0; y < m.length; y++) {
+      for (let x = 0; x < m[y].length; x++) {
+        if (m[y][x] !== 0) {
+          const bx = piece.x + x;
+          const by = piece.y + y;
+          if (
+            by < 0 ||
+            by >= ROWS ||
+            bx < 0 ||
+            bx >= COLS ||
+            board[by][bx] !== 0
+          ) {
+            return true;
+          }
+        }
       }
-    });
+    }
+    return false;
+  }
 
-    window.addEventListener('touchstart', (e) => {
-      e.preventDefault(); // 防止手机浏览器滚动
-      jump();
-    }, { passive: false });
-
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space') {
-        jump();
+  function merge(board, piece) {
+    const m = piece.matrix;
+    for (let y = 0; y < m.length; y++) {
+      for (let x = 0; x < m[y].length; x++) {
+        if (m[y][x] !== 0) {
+          const bx = piece.x + x;
+          const by = piece.y + y;
+          if (by >= 0 && by < ROWS && bx >= 0 && bx < COLS) {
+            board[by][bx] = piece.type;
+          }
+        }
       }
-    });
+    }
   }
 
-  // 更新游戏逻辑
-  function update(deltaTime) {
-    if (isGameOver) return;
-
-    const dt = deltaTime / 16.67; // 简单归一化到每帧约 60fps 的比例
-
-    // 重力加速度
-    const gravity = 0.35;
-    player.vy += gravity * dt;
-    player.y += player.vy * dt;
-
-    // 碰撞检测：底部
-    if (player.y + player.size > HEIGHT) {
-      player.y = HEIGHT - player.size;
-      isGameOver = true;
+  function rotateMatrix(matrix) {
+    const N = matrix.length;
+    const M = matrix[0].length;
+    const result = [];
+    for (let x = 0; x < M; x++) {
+      const row = [];
+      for (let y = N - 1; y >= 0; y--) {
+        row.push(matrix[y][x]);
+      }
+      result.push(row);
     }
-
-    // 确保不会飞到屏幕上方外面
-    if (player.y < 0) {
-      player.y = 0;
-      player.vy = 0;
-    }
-
-    // 计分：活得越久分数越高
-    score += dt;
+    return result;
   }
 
-  // 渲染画面
-  function render() {
-    ctx.clearRect(0, 0, WIDTH, HEIGHT);
+  function rotatePiece() {
+    const oldMatrix = currentPiece.matrix;
+    const rotated = rotateMatrix(oldMatrix);
+    const oldX = currentPiece.x;
 
-    // 背景
-    ctx.fillStyle = '#222';
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    currentPiece.matrix = rotated;
 
-    // 玩家方块
-    ctx.fillStyle = '#4CAF50';
-    ctx.fillRect(player.x, player.y, player.size, player.size);
+    // 简单的左右调整，防止旋转后冲出边界
+    if (collide(board, currentPiece)) {
+      currentPiece.x = oldX - 1;
+      if (collide(board, currentPiece)) {
+        currentPiece.x = oldX + 1;
+        if (collide(board, currentPiece)) {
+          // 旋转失败，恢复
+          currentPiece.x = oldX;
+          currentPiece.matrix = oldMatrix;
+        }
+      }
+    }
+  }
+
+  function clearLines() {
+    let cleared = 0;
+
+    outer: for (let y = ROWS - 1; y >= 0; y--) {
+      for (let x = 0; x < COLS; x++) {
+        if (board[y][x] === 0) {
+          continue outer;
+        }
+      }
+      // 这一行满了
+      const row = board.splice(y, 1)[0];
+      row.fill(0);
+      board.unshift(row);
+      cleared++;
+      y++; // 这一行重新检查
+    }
+
+    if (cleared > 0) {
+      lines += cleared;
+      // 简单计分规则：n 行一次 = n^2 * 100
+      score += cleared * cleared * 100;
+      // 可选：随消行数减小下落间隔
+      dropInterval = Math.max(150, 800 - lines * 20);
+    }
+  }
+
+  function playerMove(dir) {
+    if (gameOver) return;
+    currentPiece.x += dir;
+    if (collide(board, currentPiece)) {
+      currentPiece.x -= dir;
+    }
+  }
+
+  function playerDrop() {
+    if (gameOver) return;
+    currentPiece.y++;
+    if (collide(board, currentPiece)) {
+      currentPiece.y--;
+      merge(board, currentPiece);
+      clearLines();
+      spawnPiece();
+    }
+    dropCounter = 0;
+  }
+
+  function hardDrop() {
+    if (gameOver) return;
+    while (!collide(board, { ...currentPiece, y: currentPiece.y + 1 })) {
+      currentPiece.y++;
+    }
+    merge(board, currentPiece);
+    clearLines();
+    spawnPiece();
+    dropCounter = 0;
+  }
+
+  function drawCell(x, y, type) {
+    if (type === 0) return;
+    ctx.fillStyle = COLORS[type];
+    ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+    ctx.strokeStyle = '#111';
+    ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+  }
+
+  function drawBoard() {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // 棋盘
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        drawCell(x, y, board[y][x]);
+      }
+    }
+
+    // 当前方块
+    const m = currentPiece.matrix;
+    for (let y = 0; y < m.length; y++) {
+      for (let x = 0; x < m[y].length; x++) {
+        if (m[y][x] !== 0) {
+          drawCell(currentPiece.x + x, currentPiece.y + y, currentPiece.type);
+        }
+      }
+    }
 
     // 分数
-    ctx.fillStyle = '#f5f5f5';
-    ctx.font = '24px sans-serif';
-    ctx.fillText('Score: ' + Math.floor(score), 20, 40);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '16px sans-serif';
+    ctx.fillText('Score: ' + score, 10, 20);
+    ctx.fillText('Lines: ' + lines, 10, 40);
 
-    // 游戏结束提示
-    if (isGameOver) {
-      ctx.font = '28px sans-serif';
+    if (gameOver) {
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(0, canvas.height / 2 - 40, canvas.width, 80);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '24px sans-serif';
       const msg = 'Game Over';
-      const msg2 = '点击任意位置重新开始';
-      const w = ctx.measureText(msg).width;
+      const msg2 = '按 Enter 重新开始';
+      const w1 = ctx.measureText(msg).width;
       const w2 = ctx.measureText(msg2).width;
-
-      ctx.fillText(msg, (WIDTH - w) / 2, HEIGHT / 2 - 20);
-      ctx.font = '18px sans-serif';
-      ctx.fillText(msg2, (WIDTH - w2) / 2, HEIGHT / 2 + 20);
+      ctx.fillText(msg, (canvas.width - w1) / 2, canvas.height / 2 - 5);
+      ctx.font = '16px sans-serif';
+      ctx.fillText(msg2, (canvas.width - w2) / 2, canvas.height / 2 + 25);
     }
   }
 
-  // 游戏主循环
-  function gameLoop(timestamp) {
-    if (!lastTime) lastTime = timestamp;
-    const deltaTime = timestamp - lastTime;
-    lastTime = timestamp;
+  function update(time = 0) {
+    const delta = time - lastTime;
+    lastTime = time;
 
-    update(deltaTime);
-    render();
+    if (!gameOver) {
+      dropCounter += delta;
+      if (dropCounter > dropInterval) {
+        playerDrop();
+      }
+    }
 
-    requestAnimationFrame(gameLoop);
+    drawBoard();
+    requestAnimationFrame(update);
   }
 
-  // 入口
+  function bindInput() {
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'ArrowLeft') {
+        playerMove(-1);
+      } else if (e.code === 'ArrowRight') {
+        playerMove(1);
+      } else if (e.code === 'ArrowDown') {
+        playerDrop();
+      } else if (e.code === 'ArrowUp') {
+        rotatePiece();
+      } else if (e.code === 'Space') {
+        hardDrop();
+      } else if (e.code === 'Enter' && gameOver) {
+        resetGame();
+      }
+    });
+  }
+
   function main() {
     resetGame();
     bindInput();
-    requestAnimationFrame(gameLoop);
+    requestAnimationFrame(update);
   }
 
   main();
 })();
+
